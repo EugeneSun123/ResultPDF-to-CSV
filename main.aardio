@@ -1,0 +1,128 @@
+import fsys.dlg;
+import fsys.pdfium;
+import win.ui;
+import process;
+import win.version;
+import sys.cpu;
+import sys;
+import inet.http;
+import web.json;
+/*DSG{{*/
+mainForm = win.form(text="日立罗氏PDF数据提取工具(by孙幼军)20240724";right=456;bottom=352;bgcolor=16777215;max=false)
+mainForm.add(
+bk2={cls="bk";left=594;top=248;right=595;bottom=249;db=1;dr=1;z=4};
+button={cls="button";text='选择PDF并生成CSV\r\n(可多选)';left=234;top=165;right=419;bottom=273;bgcolor=65535;color=255;db=1;dr=1;font=LOGFONT(h=-14);z=1};
+button2={cls="button";text="关于";left=234;top=288;right=419;bottom=330;bgcolor=65535;color=255;db=1;dr=1;font=LOGFONT(h=-14);z=6};
+picturebox={cls="picturebox";left=33;top=160;right=200;bottom=324;image=$"D:\OneDrive\工作文件\09-软件开发\20240505-PDF数据提取\帮助二维码(1).jpg";notify=1;z=5};
+static={cls="static";text="日立罗氏PDF数据提取工具(正式版)";left=4;top=7;right=450;bottom=57;align="center";dl=1;dr=1;dt=1;font=LOGFONT(h=-20);notify=1;transparent=1;z=2};
+static2={cls="static";text="
+说明：
+   1.适用于罗氏C701、C702、日立008等导出的结果PDF文件，其他PDF不适用;
+   2.选择文件后会自动在PDF所在目录生成CSV文件，可用电子表格打开;
+   3.反馈BUG请附带原始PDF，谢谢。
+   ";left=22;top=35;right=440;bottom=159;ah=1;aw=1;db=1;dl=1;dr=1;dt=1;notify=1;transparent=1;z=3}
+)
+/*}}*/
+
+//定义软件版本
+var vervion = 7;
+
+mainForm.button.oncommand = function(id, event) {
+    mainForm.button.disabledText = {
+        "◈◇◇";
+        "◇◈◇";
+        "◇◇◈";text = "请稍候"
+    };
+    
+    var paths = fsys.dlg.openEx('PDF文件|*.pdf||', , , winform);
+    
+    //匹配id和日期
+    var pattern = "\s(\u?\d*?)\s?\u?\d{4,5}-[1-5]\sL?o?t?I?D?\s\:\s?(.*?)\s?(\d{4}/\d{2}/\d{2})";
+    
+    //匹配数据
+    var dataPattern = "^[+\s]*(\S{1,8}?)\s(-?[\d\.]{1,8}?)\s.*?\u\d";
+    
+    for (i, path in paths) {
+        //io.open();
+        
+        var pdf = fsys.pdfium(path);
+        var pageCount = pdf.pageCount;
+        var text = "";
+        
+        for (i = 1; pageCount; 1) {
+            pdf.pageNum = i;
+            text += pdf.extractText();
+        }
+        
+        // 保存text到临时文件，直接用text会出现匹配问题
+        var temppath = io.curDir() + "temp.txt";
+        string.save(temppath, text, false);
+        
+        var csvStr = "日期,样本号,项目,结果,,←数据由工具导出 一切以原始PDF为准 工具下载帮助地址：https://cx3njssfhv.feishu.cn/docx/SigXdfLV1ocF86xQorsc9LeEnkc?from=from_copylink" + '\r\n';
+        var temp = '';
+        
+        for line in io.lines(temppath) {
+            
+            //io.print(line);
+            //io.print(id1, id2,date);
+            //sleep(2000)
+            
+            var id1, id2, date = string.match(line, pattern);
+            
+            if (id1 != null or id2 != null and date != null) {
+                if (id1 != "") {
+                    temp = date + ',' + id1;
+                }
+                else {
+                    temp = date + ',' + id2;
+                }
+            }
+            
+            var project, num = string.match(line, dataPattern);
+            
+            if (project != null and num != null) {
+                var data = temp + ',' + project + ',' + num;
+                csvStr += data + '\r\n';
+            }
+        }
+        
+        // 删除临时文件
+        io.remove(temppath);
+        
+        //获取原pdf路径
+        var pdfpath = io.splitpath(path);
+        var savepath = pdfpath.drive + pdfpath.path + pdfpath.name + ".csv";
+        string.save(savepath, csvStr, false);
+    }
+    
+    //获取系统信息
+    var tabObject = {
+        "系统版本号": win.version.format(), "用户登录名": sys.getUserName(), "处理文件数": #paths, "CPU型号": sys.cpu.getBrand(), "时间": time(), "软件版本": vervion
+    }
+    var json = web.json.stringify(tabObject, true);
+    var http = inet.http();
+    var data = http.post("https://www.feishu.cn/flow/api/trigger-webhook/d071ab428b6b9a843924767a75170434", json);
+    
+    mainForm.button.disabledText = null;
+    if (#paths != 0) {
+        win.msgbox("PDF文件全部处理完毕，csv文件同PDF路径。" + '\n' + "请检查数据是否无误。", "保存成功提示");
+    }
+    else {
+        win.msgbox("未选择文件，或文件不存在", "出错了");
+    }
+    
+}
+
+mainForm.picturebox.oncommand = function(id, event) {
+    process.openUrl("https://cx3njssfhv.feishu.cn/docx/SigXdfLV1ocF86xQorsc9LeEnkc?from=from_copylink");
+}
+
+mainForm.button2.oncommand = function(id, event) {
+    
+    var frmChild = mainForm.loadForm("\dlg\help.aardio");
+    frmChild.show();
+    
+}
+
+mainForm.show();
+return win.loopMessage();
